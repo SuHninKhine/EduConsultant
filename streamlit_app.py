@@ -1,56 +1,74 @@
+import os
 import streamlit as st
 from openai import OpenAI
 
-# Show title and description.
-st.title("💬 Chatbot")
-st.write(
-    "This is a simple chatbot that uses OpenAI's GPT-3.5 model to generate responses. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
-    "You can also learn how to build this app step by step by [following our tutorial](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)."
+# Load API key from environment variable
+API_KEY = os.getenv("OPENROUTER_API_KEY")
+
+if not API_KEY:
+    st.error("❗️ OpenRouter API key not found. Please set the OPENROUTER_API_KEY environment variable.")
+    st.stop()
+
+# Initialize OpenRouter client
+client = OpenAI(
+    api_key=API_KEY,
+    base_url="https://openrouter.ai/api/v1"
 )
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
-else:
+# Define the system prompt for chatbot personality
+SYSTEM_PROMPT = (
+    "You are a friendly and knowledgeable AI assistant who gives helpful, concise and trustworthy information "
+    "about working, studying, or living in Singapore. Always ask questions to better understand the user's needs."
+)
 
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
+# Initialize or retrieve chat history
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {
+            "role": "assistant",
+            "content": (
+                "Hello! To get started, may I know your name? "
+                "What are you currently doing? And what are your plans for the future?"
+            )
+        },
+    ]
 
-    # Create a session state variable to store the chat messages. This ensures that the
-    # messages persist across reruns.
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+# Configure Streamlit page
+st.set_page_config(page_title="🇸🇬 SG Career & Study Bot", page_icon="🇸🇬")
+st.title("🇸🇬 SG Career & Study Bot")
+st.markdown("> Ask anything about education, work, or life in Singapore. The AI will help guide you step-by-step.")
 
-    # Display the existing chat messages via `st.chat_message`.
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+# Display existing messages in chat history (except system prompt)
+for msg in st.session_state.chat_history[1:]:
+    if msg["role"] == "assistant":
+        st.chat_message("assistant").write(msg["content"])
+    elif msg["role"] == "user":
+        st.chat_message("user").write(msg["content"])
 
-    # Create a chat input field to allow the user to enter a message. This will display
-    # automatically at the bottom of the page.
-    if prompt := st.chat_input("What is up?"):
+# Accept user input
+user_input = st.chat_input("Type your message here...")
 
-        # Store and display the current prompt.
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        # Generate a response using the OpenAI API.
-        stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
-            ],
-            stream=True,
+def ask_ai(user_message, history):
+    # Add user message
+    history.append({"role": "user", "content": user_message})
+    try:
+        response = client.chat.completions.create(
+            model="meta-llama/llama-3-70b-instruct",
+            messages=history,
+            max_tokens=800,
+            temperature=0.3,
         )
+        reply = response.choices[0].message.content
+        # Add assistant response
+        history.append({"role": "assistant", "content": reply})
+        return reply, history
+    except Exception as e:
+        error_msg = f"⚠️ Error: {str(e)}"
+        history.append({"role": "assistant", "content": error_msg})
+        return error_msg, history
 
-        # Stream the response to the chat using `st.write_stream`, then store it in 
-        # session state.
-        with st.chat_message("assistant"):
-            response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+# Handle user input & update chat
+if user_input:
+    reply, st.session_state.chat_history = ask_ai(user_input, st.session_state.chat_history)
+    st.experimental_rerun()
