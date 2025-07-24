@@ -71,4 +71,5 @@ def ask_ai(user_message, history):
 # Handle user input & update chat
 if user_input:
     reply, st.session_state.chat_history = ask_ai(user_input, st.session_state.chat_history)
-    st.experimental_rerun()
+    st.rerun()
+
