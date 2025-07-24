@@ -8,28 +8,19 @@ if not API_KEY:
     st.error("❗️ OpenRouter API key not found. Please add it in your Streamlit secrets.")
     st.stop()
 
-# Initialize OpenRouter client
 client = OpenAI(api_key=API_KEY, base_url="https://openrouter.ai/api/v1")
 
-# Streamlit page configuration
 st.set_page_config(page_title="🇸🇬 SG Career & Study Bot", page_icon="🇸🇬")
-
 st.title("🇸🇬 SG Career & Study Bot")
 st.markdown("> Ask anything about education, work, or life in Singapore. The AI will help guide you step-by-step.")
 
-# Initialize user profile and chat history in session state
 if "user_profile" not in st.session_state:
-    st.session_state.user_profile = {
-        "name": None,
-        "identity": None,
-        "origin": None,
-        "is_foreigner": None,
-    }
-
+    # Removed 'origin' from the profile dictionary
+    st.session_state.user_profile = {"name": None, "identity": None, "is_foreigner": None}
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# Step 1: Ask user for their name (only name)
+# Step 1: Ask user for their name (only once)
 if not st.session_state.user_profile["name"]:
     name_input = st.text_input("Hi! What's your name?")
     if name_input:
@@ -38,59 +29,33 @@ if not st.session_state.user_profile["name"]:
         st.rerun()
     st.stop()
 
-# Helper to build personalized system prompt dynamically
+# Build assistant system prompt with profile info
 def build_system_prompt(profile):
     base_prompt = (
-        "You are a friendly and knowledgeable AI assistant who gives helpful, concise, "
-        "and trustworthy information about working, studying, or living in Singapore. "
-        "Always ask questions to better understand the user's needs."
+        "You are a friendly and knowledgeable AI assistant who gives helpful, concise, and trustworthy information "
+        "about working, studying, or living in Singapore. Always ask questions to better understand the user's needs."
     )
-    # Add available user info (if any) without explicit sensitive details in greeting
     additions = []
     if profile.get("identity"):
         additions.append(f"The user is a {profile['identity']}.")
-    if profile.get("origin"):
-        additions.append(f"The user is from {profile['origin']}.")
+    # 'origin' removed, so no addition here
     if profile.get("is_foreigner") is not None:
         additions.append(
             "The user is a foreigner." if profile['is_foreigner'] == "Yes" else "The user is a Singaporean or permanent resident."
         )
     return base_prompt + " " + " ".join(additions) if additions else base_prompt
 
-# If chat history is empty, initialize with greeting from assistant (only name)
-if not st.session_state.chat_history:
-    greeting = f"Hello, {st.session_state.user_profile['name']}! I am here to assist you with education, career, or life in Singapore. Feel free to ask me anything!"
-    st.session_state.chat_history = [
-        {"role": "system", "content": build_system_prompt(st.session_state.user_profile)},
-        {"role": "assistant", "content": greeting},
-    ]
-
-# Display chat history (skip the system prompt)
-for message in st.session_state.chat_history[1:]:
-    if message["role"] == "assistant":
-        st.chat_message("assistant").write(message["content"])
-    elif message["role"] == "user":
-        st.chat_message("user").write(message["content"])
-
-# Function to append a system assistant message (for onboarding questions)
-def append_assistant_message(msg):
-    st.session_state.chat_history.append({"role": "assistant", "content": msg})
-
-# Function to append user message to chat history
-def append_user_message(msg):
-    st.session_state.chat_history.append({"role": "user", "content": msg})
-
-# Define onboarding questions and flow
+# Updated onboarding questions — removed 'origin' question
 onboarding_questions = [
-    ("identity", f"{st.session_state.user_profile['name']}, please select your current status:", 
-        ["Student", "Working Professional", "Visitor/Planning to come to Singapore", "Others"]),
-    ("origin", f"{st.session_state.user_profile['name']}, which country are you from?", None),
-    ("is_foreigner", f"{st.session_state.user_profile['name']}, are you a foreigner to Singapore?", 
-        ["Yes", "No"]),
+    ("identity",
+     f"{st.session_state.user_profile['name']}, please select your current status:",
+     ["Student", "Working Professional", "Visitor/Planning to come to Singapore", "Others"]),
+    ("is_foreigner",
+     f"{st.session_state.user_profile['name']}, are you a foreigner to Singapore?",
+     ["Yes", "No"]),
 ]
 
 def onboarding_incomplete(profile):
-    # Return the first unset onboarding field
     for field, _, _ in onboarding_questions:
         if profile.get(field) is None:
             return field
@@ -98,27 +63,24 @@ def onboarding_incomplete(profile):
 
 def ask_onboarding_question(field, question, options=None):
     if options:
-        # Display options (radio/selectbox) for user to choose
         choice = st.radio(question, options, key=field, horizontal=True)
         if st.button("Submit", key=f"submit_{field}"):
             st.session_state.user_profile[field] = choice
-            append_user_message(choice)
-            # Update system prompt since profile changed
+            st.session_state.chat_history.append({"role": "user", "content": choice})
             system_prompt = build_system_prompt(st.session_state.user_profile)
-            st.session_state.chat_history[0]["content"] = system_prompt
+            if st.session_state.chat_history:
+                st.session_state.chat_history[0]["content"] = system_prompt
             st.rerun()
     else:
-        # Text input for free text answers
         answer = st.text_input(question, key=field)
         if answer:
             st.session_state.user_profile[field] = answer.strip()
-            append_user_message(answer.strip())
-            # Update system prompt since profile changed
+            st.session_state.chat_history.append({"role": "user", "content": answer.strip()})
             system_prompt = build_system_prompt(st.session_state.user_profile)
-            st.session_state.chat_history[0]["content"] = system_prompt
+            if st.session_state.chat_history:
+                st.session_state.chat_history[0]["content"] = system_prompt
             st.rerun()
 
-# Check if onboarding is incomplete and ask accordingly
 next_field = onboarding_incomplete(st.session_state.user_profile)
 if next_field:
     for field, question, options in onboarding_questions:
@@ -126,7 +88,70 @@ if next_field:
             ask_onboarding_question(field, question, options)
     st.stop()
 
-# Function to send user query to OpenRouter and append response
+# Show personalized intro/suggestion message once after onboarding
+if not st.session_state.get("intro_message_shown"):
+    user_name = st.session_state.user_profile.get("name", "")
+    user_identity = st.session_state.user_profile.get("identity", "")
+
+    topics_map = {
+        "Student": [
+            "Universities and Polytechnic options",
+            "Scholarships and Financial Aid",
+            "Student Visa Requirements",
+            "Part-time work while studying"
+        ],
+        "Working Professional": [
+            "Work Permit and Employment Pass",
+            "Job Market and Industries",
+            "Career Development and Training",
+            "Singaporean Work Culture"
+        ],
+        "Visitor/Planning to come to Singapore": [
+            "Visa and Entry Requirements",
+            "Living Costs and Housing",
+            "Social and Cultural Adaptation",
+            "Local Laws and Regulations"
+        ],
+        "Others": [
+            "General Education and Career Advice",
+            "Living and Working in Singapore",
+            "Government Services and Support",
+        ]
+    }
+
+    topics = topics_map.get(user_identity, topics_map["Others"])
+    topics_str = "\n".join(f"- {topic}" for topic in topics)    
+
+    intro_message = (
+        f"{user_name}, it's a great pleasure to meet you.\n\n"
+        "You can ask me any questions you have—these are just suggested topics you might be interested in:\n"
+        f"{topics_str}"
+    )
+
+    st.session_state.chat_history.append({"role": "assistant", "content": intro_message})
+    st.session_state.intro_message_shown = True
+    st.rerun()
+
+# Initialize chat history with system prompt and first greeting if still empty
+if not st.session_state.chat_history:
+    system_prompt = build_system_prompt(st.session_state.user_profile)
+    greeting = f"Hello, {st.session_state.user_profile['name']}! I am here to assist you with education, career, or life in Singapore. Feel free to ask me anything!"
+    st.session_state.chat_history = [
+        {"role": "system", "content": system_prompt},
+        {"role": "assistant", "content": greeting},
+    ]
+else:
+    system_prompt = build_system_prompt(st.session_state.user_profile)
+    st.session_state.chat_history[0]["content"] = system_prompt
+
+# Display chat messages (skip system prompt)
+for message in st.session_state.chat_history[1:]:
+    if message["role"] == "assistant":
+        st.chat_message("assistant").write(message["content"])
+    elif message["role"] == "user":
+        st.chat_message("user").write(message["content"])
+
+# Assistant does not re-use the user's name in later turns:
 def ask_ai(user_message, history):
     history.append({"role": "user", "content": user_message})
     try:
@@ -144,10 +169,9 @@ def ask_ai(user_message, history):
         history.append({"role": "assistant", "content": error_msg})
         return error_msg, history
 
-# Accept normal chat input once onboarding complete
-user_input = st.chat_input(f"{st.session_state.user_profile['name']}, type your message here...")
+user_input = st.chat_input("Type your message here...")  # No more name repetition
 
 if user_input:
-    append_user_message(user_input)
+    st.session_state.chat_history.append({"role": "user", "content": user_input})
     reply, st.session_state.chat_history = ask_ai(user_input, st.session_state.chat_history)
     st.rerun()
