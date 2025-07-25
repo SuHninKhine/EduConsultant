@@ -1,8 +1,5 @@
-# 💬 Chatbot template
-
-A simple Streamlit app that shows how to build a chatbot using OpenAI's GPT-3.5.
-
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://chatbot-template.streamlit.app/)
+# Education and carrer consultant - made for Singapore use
+Ask anything about studying, working, or living in Singapore. This app gives you instant, step-by-step guidance—personalized for students, professionals, and newcomers.
 
 ### How to run it on your own machine
 
