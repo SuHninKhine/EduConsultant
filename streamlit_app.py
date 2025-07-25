@@ -3,7 +3,6 @@ from openai import OpenAI
 
 # Load API key from Streamlit secrets
 API_KEY = st.secrets.get("OPENROUTER_API_KEY")
-
 if not API_KEY:
     st.error("❗️ OpenRouter API key not found. Please add it in your Streamlit secrets.")
     st.stop()
@@ -14,13 +13,17 @@ st.set_page_config(page_title="🇸🇬 SG Career & Study Bot", page_icon="🇸�
 st.title("🇸🇬 SG Career & Study Bot")
 st.markdown("> Ask anything about education, work, or life in Singapore. The AI will help guide you step-by-step.")
 
+# Initialize user profile and chat history if not present
 if "user_profile" not in st.session_state:
-    # Removed 'origin' from the profile dictionary
-    st.session_state.user_profile = {"name": None, "identity": None, "is_foreigner": None}
+    st.session_state.user_profile = {
+        "name": None,
+        "identity": None,
+        "is_foreigner": None,
+    }
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# Step 1: Ask user for their name (only once)
+# Step 1: Ask for user name once
 if not st.session_state.user_profile["name"]:
     name_input = st.text_input("Hi! What's your name?")
     if name_input:
@@ -29,29 +32,29 @@ if not st.session_state.user_profile["name"]:
         st.rerun()
     st.stop()
 
-# Build assistant system prompt with profile info
+# Build system prompt based on user profile
 def build_system_prompt(profile):
     base_prompt = (
-        "You are a friendly and knowledgeable AI assistant who gives helpful, concise, and trustworthy information "
-        "about working, studying, or living in Singapore. Always ask questions to better understand the user's needs."
+        "You are a friendly and knowledgeable AI assistant who gives helpful, concise, "
+        "and trustworthy information about working, studying, or living in Singapore. "
+        "Always ask questions to better understand the user's needs."
     )
     additions = []
     if profile.get("identity"):
         additions.append(f"The user is a {profile['identity']}.")
-    # 'origin' removed, so no addition here
     if profile.get("is_foreigner") is not None:
         additions.append(
             "The user is a foreigner." if profile['is_foreigner'] == "Yes" else "The user is a Singaporean or permanent resident."
         )
     return base_prompt + " " + " ".join(additions) if additions else base_prompt
 
-# Updated onboarding questions — removed 'origin' question
+# Onboarding questions
 onboarding_questions = [
     ("identity",
-     f"{st.session_state.user_profile['name']}, please select your current status:",
+     "Please select your current status:",
      ["Student", "Working Professional", "Visitor/Planning to come to Singapore", "Others"]),
     ("is_foreigner",
-     f"{st.session_state.user_profile['name']}, are you a foreigner to Singapore?",
+     "Are you a foreigner to Singapore?",
      ["Yes", "No"]),
 ]
 
@@ -67,6 +70,7 @@ def ask_onboarding_question(field, question, options=None):
         if st.button("Submit", key=f"submit_{field}"):
             st.session_state.user_profile[field] = choice
             st.session_state.chat_history.append({"role": "user", "content": choice})
+            # Update system prompt message in chat history index 0
             system_prompt = build_system_prompt(st.session_state.user_profile)
             if st.session_state.chat_history:
                 st.session_state.chat_history[0]["content"] = system_prompt
@@ -81,6 +85,7 @@ def ask_onboarding_question(field, question, options=None):
                 st.session_state.chat_history[0]["content"] = system_prompt
             st.rerun()
 
+# Run onboarding if not complete
 next_field = onboarding_incomplete(st.session_state.user_profile)
 if next_field:
     for field, question, options in onboarding_questions:
@@ -88,7 +93,7 @@ if next_field:
             ask_onboarding_question(field, question, options)
     st.stop()
 
-# Show personalized intro/suggestion message once after onboarding
+# Show intro message once after onboarding
 if not st.session_state.get("intro_message_shown"):
     user_name = st.session_state.user_profile.get("name", "")
     user_identity = st.session_state.user_profile.get("identity", "")
@@ -120,7 +125,7 @@ if not st.session_state.get("intro_message_shown"):
     }
 
     topics = topics_map.get(user_identity, topics_map["Others"])
-    topics_str = "\n".join(f"- {topic}" for topic in topics)    
+    topics_str = "\n".join(f"- {topic}" for topic in topics)
 
     intro_message = (
         f"{user_name}, it's a great pleasure to meet you.\n\n"
@@ -128,11 +133,12 @@ if not st.session_state.get("intro_message_shown"):
         f"{topics_str}"
     )
 
+    # Append intro message only once
     st.session_state.chat_history.append({"role": "assistant", "content": intro_message})
     st.session_state.intro_message_shown = True
     st.rerun()
 
-# Initialize chat history with system prompt and first greeting if still empty
+# Initialize chat history if empty
 if not st.session_state.chat_history:
     system_prompt = build_system_prompt(st.session_state.user_profile)
     greeting = f"Hello, {st.session_state.user_profile['name']}! I am here to assist you with education, career, or life in Singapore. Feel free to ask me anything!"
@@ -144,16 +150,15 @@ else:
     system_prompt = build_system_prompt(st.session_state.user_profile)
     st.session_state.chat_history[0]["content"] = system_prompt
 
-# Display chat messages (skip system prompt)
+# Display chat messages (except system prompt)
 for message in st.session_state.chat_history[1:]:
     if message["role"] == "assistant":
         st.chat_message("assistant").write(message["content"])
     elif message["role"] == "user":
         st.chat_message("user").write(message["content"])
 
-# Assistant does not re-use the user's name in later turns:
+# Function to ask AI and return response
 def ask_ai(user_message, history):
-    history.append({"role": "user", "content": user_message})
     try:
         response = client.chat.completions.create(
             model="meta-llama/llama-3-70b-instruct",
@@ -169,7 +174,8 @@ def ask_ai(user_message, history):
         history.append({"role": "assistant", "content": error_msg})
         return error_msg, history
 
-user_input = st.chat_input("Type your message here...")  # No more name repetition
+# User input prompt
+user_input = st.chat_input("Type your message here...")
 
 if user_input:
     st.session_state.chat_history.append({"role": "user", "content": user_input})
