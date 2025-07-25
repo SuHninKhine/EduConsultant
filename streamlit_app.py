@@ -1,3 +1,6 @@
+
+
+
 import streamlit as st
 from openai import OpenAI
 
@@ -9,7 +12,8 @@ if not API_KEY:
 
 client = OpenAI(api_key=API_KEY, base_url="https://openrouter.ai/api/v1")
 
-st.set_page_config(page_title="🇸🇬 SG Career & Study Bot", page_icon="🇸🇬")
+
+st.set_page_config(page_title="🇸🇬 SG Career & Study Bot", page_icon="🇸🇬", page_description="An AI assistant to help with education, work, and living in Singapore. Ask your questions and get step-by-step guidance.")
 st.title("🇸🇬 SG Career & Study Bot")
 st.markdown("> Ask anything about education, work, or life in Singapore. The AI will help guide you step-by-step.")
 
