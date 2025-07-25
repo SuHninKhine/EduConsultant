@@ -50,12 +50,9 @@ def build_system_prompt(profile):
 
 # Onboarding questions
 onboarding_questions = [
-    ("identity",
-     "Please select your current status:",
+    ("identity", "Please select your current status:",
      ["Student", "Working Professional", "Visitor/Planning to come to Singapore", "Others"]),
-    ("is_foreigner",
-     "Are you a foreigner to Singapore?",
-     ["Yes", "No"]),
+    ("is_foreigner", "Are you a foreigner to Singapore?", ["Yes", "No"]),
 ]
 
 def onboarding_incomplete(profile):
@@ -70,7 +67,6 @@ def ask_onboarding_question(field, question, options=None):
         if st.button("Submit", key=f"submit_{field}"):
             st.session_state.user_profile[field] = choice
             st.session_state.chat_history.append({"role": "user", "content": choice})
-            # Update system prompt message in chat history index 0
             system_prompt = build_system_prompt(st.session_state.user_profile)
             if st.session_state.chat_history:
                 st.session_state.chat_history[0]["content"] = system_prompt
@@ -133,7 +129,6 @@ if not st.session_state.get("intro_message_shown"):
         f"{topics_str}"
     )
 
-    # Append intro message only once
     st.session_state.chat_history.append({"role": "assistant", "content": intro_message})
     st.session_state.intro_message_shown = True
     st.rerun()
@@ -157,7 +152,7 @@ for message in st.session_state.chat_history[1:]:
     elif message["role"] == "user":
         st.chat_message("user").write(message["content"])
 
-# Function to ask AI and return response
+# Function to ask AI and return response with follow-ups
 def ask_ai(user_message, history):
     try:
         response = client.chat.completions.create(
@@ -166,9 +161,23 @@ def ask_ai(user_message, history):
             max_tokens=800,
             temperature=0.3,
         )
-        reply = response.choices[0].message.content
-        history.append({"role": "assistant", "content": reply})
-        return reply, history
+        ai_reply = response.choices[0].message.content.strip()
+
+      
+        # Your custom follow-up questions
+        followups = (
+            "\n\n---\n"
+            "🔍 *You can also ask:*\n"
+            "- Would it help to discuss how this fits with what we've talked about so far?\n"
+            "- Are you interested in the bigger picture or trends related to this?\n"
+            "- What are you currently doing or planning next about this?"
+        )
+
+        full_reply = ai_reply + followups
+
+        history.append({"role": "assistant", "content": full_reply})
+        return full_reply, history
+
     except Exception as e:
         error_msg = f"⚠️ Error: {str(e)}"
         history.append({"role": "assistant", "content": error_msg})
