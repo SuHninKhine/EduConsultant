@@ -1,8 +1,7 @@
-
-
-
 import streamlit as st
+import streamlit.components.v1 as components
 from openai import OpenAI
+
 
 # Load API key from Streamlit secrets
 API_KEY = st.secrets.get("OPENROUTER_API_KEY")
@@ -10,12 +9,27 @@ if not API_KEY:
     st.error("❗️ OpenRouter API key not found. Please add it in your Streamlit secrets.")
     st.stop()
 
+
 client = OpenAI(api_key=API_KEY, base_url="https://openrouter.ai/api/v1")
 
 
 st.set_page_config(page_title="🇸🇬 SG Career & Study Bot", page_icon="🇸🇬")
 st.title("🇸🇬 SG Career & Study Bot")
 st.markdown("> Ask anything about education, work, or life in Singapore. The AI will help guide you step-by-step.")
+
+
+# CSS to reduce scroll anchoring behavior (may not be enough alone)
+st.markdown(
+    """
+<style>
+* {
+  overflow-anchor: none !important;
+}
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
 
 # Initialize user profile and chat history if not present
 if "user_profile" not in st.session_state:
@@ -27,6 +41,7 @@ if "user_profile" not in st.session_state:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
+
 # Step 1: Ask for user name once
 if not st.session_state.user_profile["name"]:
     name_input = st.text_input("Hi! What's your name?")
@@ -36,7 +51,7 @@ if not st.session_state.user_profile["name"]:
         st.rerun()
     st.stop()
 
-# Build system prompt based on user profile
+
 def build_system_prompt(profile):
     base_prompt = (
         "You are a friendly and knowledgeable AI assistant who gives helpful, concise, "
@@ -48,22 +63,24 @@ def build_system_prompt(profile):
         additions.append(f"The user is a {profile['identity']}.")
     if profile.get("is_foreigner") is not None:
         additions.append(
-            "The user is a foreigner." if profile['is_foreigner'] == "Yes" else "The user is a Singaporean or permanent resident."
+            "The user is a foreigner." if profile["is_foreigner"] == "Yes" else "The user is a Singaporean or permanent resident."
         )
     return base_prompt + " " + " ".join(additions) if additions else base_prompt
 
+
 # Onboarding questions
 onboarding_questions = [
-    ("identity", "Please select your current status:",
-     ["Student", "Working Professional", "Visitor/Planning to come to Singapore", "Others"]),
+    ("identity", "Please select your current status:", ["Student", "Working Professional", "Visitor/Planning to come to Singapore", "Others"]),
     ("is_foreigner", "Are you a foreigner to Singapore?", ["Yes", "No"]),
 ]
+
 
 def onboarding_incomplete(profile):
     for field, _, _ in onboarding_questions:
         if profile.get(field) is None:
             return field
     return None
+
 
 def ask_onboarding_question(field, question, options=None):
     if options:
@@ -85,6 +102,7 @@ def ask_onboarding_question(field, question, options=None):
                 st.session_state.chat_history[0]["content"] = system_prompt
             st.rerun()
 
+
 # Run onboarding if not complete
 next_field = onboarding_incomplete(st.session_state.user_profile)
 if next_field:
@@ -92,6 +110,7 @@ if next_field:
         if field == next_field:
             ask_onboarding_question(field, question, options)
     st.stop()
+
 
 # Show intro message once after onboarding
 if not st.session_state.get("intro_message_shown"):
@@ -103,25 +122,25 @@ if not st.session_state.get("intro_message_shown"):
             "Universities and Polytechnic options",
             "Scholarships and Financial Aid",
             "Student Visa Requirements",
-            "Part-time work while studying"
+            "Part-time work while studying",
         ],
         "Working Professional": [
             "Work Permit and Employment Pass",
             "Job Market and Industries",
             "Career Development and Training",
-            "Singaporean Work Culture"
+            "Singaporean Work Culture",
         ],
         "Visitor/Planning to come to Singapore": [
             "Visa and Entry Requirements",
             "Living Costs and Housing",
             "Social and Cultural Adaptation",
-            "Local Laws and Regulations"
+            "Local Laws and Regulations",
         ],
         "Others": [
             "General Education and Career Advice",
             "Living and Working in Singapore",
             "Government Services and Support",
-        ]
+        ],
     }
 
     topics = topics_map.get(user_identity, topics_map["Others"])
@@ -137,6 +156,7 @@ if not st.session_state.get("intro_message_shown"):
     st.session_state.intro_message_shown = True
     st.rerun()
 
+
 # Initialize chat history if empty
 if not st.session_state.chat_history:
     system_prompt = build_system_prompt(st.session_state.user_profile)
@@ -149,6 +169,7 @@ else:
     system_prompt = build_system_prompt(st.session_state.user_profile)
     st.session_state.chat_history[0]["content"] = system_prompt
 
+
 # Display chat messages (except system prompt)
 for message in st.session_state.chat_history[1:]:
     if message["role"] == "assistant":
@@ -156,7 +177,19 @@ for message in st.session_state.chat_history[1:]:
     elif message["role"] == "user":
         st.chat_message("user").write(message["content"])
 
-# Function to ask AI and return response with follow-ups
+
+# Inject JavaScript to scroll page to the top on every rerun
+components.html(
+    """
+    <script>
+    window.scrollTo(0, 0);
+    </script>
+    """,
+    height=0,
+    width=0,
+)
+
+
 def ask_ai(user_message, history):
     try:
         response = client.chat.completions.create(
@@ -167,20 +200,10 @@ def ask_ai(user_message, history):
         )
         ai_reply = response.choices[0].message.content.strip()
 
-      
-        # Your custom follow-up questions
-        followups = (
-            "\n\n---\n"
-            "🔍 *You can also ask:*\n"
-            "- Would it help to discuss how this fits with what we've talked about so far?\n"
-            "- Are you interested in the bigger picture or trends related to this?\n"
-            "- What are you currently doing or planning next about this?"
-        )
+        # Optional: Add follow-up prompts or additional info here if needed
 
-        full_reply = ai_reply
-
-        history.append({"role": "assistant", "content": full_reply})
-        return full_reply, history
+        history.append({"role": "assistant", "content": ai_reply})
+        return ai_reply, history
 
     except Exception as e:
         error_msg = f"⚠️ Error: {str(e)}"
@@ -188,51 +211,27 @@ def ask_ai(user_message, history):
         return error_msg, history
 
 
-#         # Handle any pending input from previous rerun
-# if "pending_user_input" in st.session_state:
-#     with st.chat_message("user"):
-#         st.write(st.session_state.pending_user_input)
-#     with st.spinner("Please wait a moment..."):
-#         reply, st.session_state.chat_history = ask_ai(
-#             st.session_state.pending_user_input,
-#             st.session_state.chat_history
-#         )
-#     del st.session_state["pending_user_input"]
-#     st.rerun()
-
-
-# # Capture new user input
-# user_input = st.chat_input("Type your message here...")
-
-# if user_input:
-#     st.session_state.chat_history.append({"role": "user", "content": user_input})
-#     st.session_state.pending_user_input = user_input
-#     st.rerun()
-
-# Step 1: If there's pending input, display it and call the AI
+# Step 1: If there's pending user input, show and process it
 if "pending_user_input" in st.session_state:
     user_msg = st.session_state.pending_user_input
 
     # Show user message immediately before spinner
     st.chat_message("user").write(user_msg)
 
-    # Append to history BEFORE calling API (to maintain full history in ask_ai)
+    # Append to chat history BEFORE calling AI (keeping full history)
     st.session_state.chat_history.append({"role": "user", "content": user_msg})
 
     with st.spinner("Please wait a moment..."):
-        reply, st.session_state.chat_history = ask_ai(
-            user_msg,
-            st.session_state.chat_history
-        )
+        reply, st.session_state.chat_history = ask_ai(user_msg, st.session_state.chat_history)
 
-    # Clear the temp input
+    # Clear pending input and rerun to display AI reply
     del st.session_state["pending_user_input"]
     st.rerun()
 
-# Step 2: Input box (runs after the spinner is done)
+
+# Step 2: Show input box for new user messages after processing previous input
 user_input = st.chat_input("Type your message here...")
 
 if user_input:
-    # Store it temporarily to trigger spinner logic
     st.session_state.pending_user_input = user_input
     st.rerun()
